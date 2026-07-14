@@ -1,0 +1,27 @@
+# Secrets — never commit real keys
+.env
+backend/.env
+# ...but keep the placeholder template committed
+!backend/.env.example
+
+# Virtual environments
+venv/
+.venv/
+backend/venv/
+
+# Local API-response cache (flight/hotel RapidAPI results)
+# CACHE_DIR in sky_scrapper.py / booking_com.py resolves here.
+cache/
+backend/mcp_servers/cache/
+
+# RAG vector store (regenerable via the ingest pipeline)
+backend/chroma_db/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Claude Code local settings
+.claude/settings.local.json

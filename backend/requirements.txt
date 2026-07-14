@@ -1,0 +1,33 @@
+# WAYFARE backend — merged dependencies for the researcher/curator pipeline.
+# Combines the former root graph/MCP-server deps with Dhruv's curator/RAG deps.
+
+# --- Web framework (FastAPI wrapper) ---
+fastapi
+uvicorn
+
+# --- Config ---
+python-dotenv
+
+# --- LangGraph orchestration + MCP tool servers ---
+langgraph
+langchain-mcp-adapters
+mcp
+
+# --- LangChain ecosystem ---
+langchain
+langchain-core
+langchain-community
+langchain-text-splitters
+langchain-chroma
+langchain-huggingface
+langchain-google-genai
+
+# --- Google / Gemini ---
+google-genai
+
+# --- RAG: vector store + embeddings ---
+chromadb
+sentence-transformers
+
+# --- HTTP client (flight/hotel RapidAPI calls) ---
+requests
