@@ -1,7 +1,7 @@
 import json
 import logging
 
-from services.gemini_service import client
+from services.groq_service import generate_text
 from rag.corpus_builder import build_corpus
 from rag.ingest import ingest
 from rag.retrieve import retrieve_context, destination_exists
@@ -80,12 +80,7 @@ Return ONLY valid JSON matching this schema exactly. No markdown. No explanation
 }}
 """
 
-    response = client.models.generate_content(
-        model="models/gemini-flash-latest",
-        contents=prompt,
-    )
-
-    text = response.text.strip()
+    text = generate_text(prompt).strip()
     if text.startswith("```"):
         text = text.replace("```json", "").replace("```", "").strip()
 

@@ -139,7 +139,7 @@ The curator agent requires one environment variable. Create `backend/.env` from 
 
 ```bash
 cp backend/.env.example backend/.env
-# Then fill in your GEMINI_API_KEY
+# Then fill in your GROQ_API_KEY
 ```
 
 Install dependencies:
@@ -158,8 +158,9 @@ The embedding model (`BAAI/bge-small-en-v1.5`) downloads automatically from Hugg
 ## Error Handling
 
 The function raises:
-- `google.genai.errors.ClientError` — if the Gemini API key is invalid or quota is exhausted
-- `json.JSONDecodeError` — if Gemini returns malformed JSON (rare; handled by prompt constraints)
+- `RuntimeError` — if the Groq API key is missing or still a placeholder
+- `groq.APIError` — if the Groq API call fails (invalid key, rate limit, service error)
+- `json.JSONDecodeError` — if Groq returns malformed JSON (rare; handled by prompt constraints)
 - `requests.exceptions.ConnectionError` — if the machine has no internet (Wikipedia fetch)
 
 Wrap the call in a try/except in your node if you need graceful degradation:

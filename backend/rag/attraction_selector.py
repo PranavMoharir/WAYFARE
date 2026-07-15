@@ -1,13 +1,13 @@
 import json
 
-from services.gemini_service import client
+from services.groq_service import generate_text
 
 _SEED_COUNT = 20
 
 
 def select_attractions(destination: str) -> list[str]:
     """
-    Ask Gemini to generate a diverse list of attraction names for a destination.
+    Ask the LLM to generate a diverse list of attraction names for a destination.
     Returns names only — actual content is fetched from Wikipedia separately.
     """
     prompt = f"""You are a travel research assistant.
@@ -35,12 +35,7 @@ Schema:
 }}
 """
 
-    response = client.models.generate_content(
-        model="models/gemini-flash-latest",
-        contents=prompt,
-    )
-
-    text = response.text.strip()
+    text = generate_text(prompt).strip()
     if text.startswith("```"):
         text = text.replace("```json", "").replace("```", "").strip()
 

@@ -20,10 +20,7 @@ langchain-community
 langchain-text-splitters
 langchain-chroma
 langchain-huggingface
-langchain-google-genai
-
-# --- Google / Gemini ---
-google-genai
+langchain-groq
 
 # --- RAG: vector store + embeddings ---
 chromadb
