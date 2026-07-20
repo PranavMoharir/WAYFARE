@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import requests
 from mcp.server.fastmcp import FastMCP
 
 # Support running both as a module (python -m hotel_server.server) and as a
@@ -46,6 +47,10 @@ def search_hotels(
     Returns:
         A dict with a ``hotels`` list; each hotel has ``name``,
         ``price_per_night`` (INR), ``rating``, and ``distance``.
+
+        On failure the same shape is returned with an empty ``hotels`` list
+        plus ``error``/``error_kind``, so the caller can tell a broken call
+        apart from a search that genuinely found nothing.
     """
     try:
         result = _search_hotels(destination, checkin, checkout)
@@ -53,7 +58,22 @@ def search_hotels(
         result["count"] = len(result["hotels"])
         return result
     except BookingComError as exc:
-        return {"error": str(exc), "hotels": []}
+        return {"error": str(exc), "error_kind": "api_error", "hotels": []}
+    except requests.HTTPError as exc:
+        # raise_for_status() on a non-2xx. 429 is the RapidAPI monthly quota.
+        status = exc.response.status_code if exc.response is not None else None
+        return {
+            "error": f"Booking.com HTTP {status}: {exc}",
+            "error_kind": "quota_exceeded" if status == 429 else "http_error",
+            "status_code": status,
+            "hotels": [],
+        }
+    except requests.RequestException as exc:
+        return {
+            "error": f"Booking.com request failed: {exc!r}",
+            "error_kind": "network_error",
+            "hotels": [],
+        }
 
 
 if __name__ == "__main__":

@@ -70,6 +70,14 @@ class TravelState(TypedDict, total=False):
     budget_check_passed: bool
     budget_infeasible: bool
     round_count: int
+    # Tool-call failures recorded by the researcher (empty when every call
+    # succeeded, whether or not it found anything). Lets later nodes tell a
+    # broken search apart from one that genuinely returned no options.
+    research_errors: List[Dict[str, Any]]
+    # Set when the proposal is missing a flight or hotel, so the budget check
+    # is not meaningful. See ``budget_enforcer_node``.
+    data_incomplete: bool
+    incomplete_reason: str
 
 
 # --------------------------------------------------------------------------- #
@@ -186,6 +194,8 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
 
     flight_options: List[Dict[str, Any]] = []
     hotel_options: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    called_tools: set[str] = set()
 
     # Let the model call tools over a few turns until it stops requesting them.
     for _ in range(5):
@@ -209,13 +219,61 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
                 )
                 continue
 
-            raw = await tool.ainvoke(args)
+            called_tools.add(name)
+
+            # A tool that raises (rather than returning an ``error`` payload)
+            # must not look like an empty result set, so record it and move on.
+            try:
+                raw = await tool.ainvoke(args)
+            except Exception as exc:
+                error = {
+                    "tool": name,
+                    "args": args,
+                    "error_kind": "tool_exception",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+                errors.append(error)
+                print(f"  [{name}] TOOL CALL FAILED — {error['error']}")
+                messages.append(
+                    ToolMessage(
+                        content=json.dumps(error),
+                        tool_call_id=call["id"],
+                    )
+                )
+                continue
+
             parsed = _parse_tool_output(raw)
+            result_key = "flights" if name == "search_flights" else "hotels"
+            items = parsed.get(result_key) or []
+
+            if parsed.get("error"):
+                # The server caught the failure and reported it in-band.
+                error = {
+                    "tool": name,
+                    "args": args,
+                    "error_kind": parsed.get("error_kind", "unknown"),
+                    "error": parsed["error"],
+                }
+                if parsed.get("status_code") is not None:
+                    error["status_code"] = parsed["status_code"]
+                errors.append(error)
+                print(
+                    f"  [{name}] TOOL CALL FAILED "
+                    f"({error['error_kind']}) — {error['error']}"
+                )
+            elif not items:
+                # Call succeeded; the search simply matched nothing.
+                print(f"  [{name}] OK — 0 results (genuine empty response)")
+            else:
+                print(
+                    f"  [{name}] OK — {len(items)} result(s) "
+                    f"(source={parsed.get('source', 'unknown')})"
+                )
 
             if name == "search_flights":
-                flight_options.extend(parsed.get("flights", []) or [])
+                flight_options.extend(items)
             elif name == "search_hotels":
-                hotel_options.extend(parsed.get("hotels", []) or [])
+                hotel_options.extend(items)
 
             messages.append(
                 ToolMessage(
@@ -224,7 +282,29 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
                 )
             )
 
-    return {"flight_options": flight_options, "hotel_options": hotel_options}
+    # A tool the model never called is neither a success nor a failure, but it
+    # leaves a gap the later nodes need to know about. This is what a exhausted
+    # flight quota looks like in practice: the model burns every turn retrying
+    # search_flights and never gets around to search_hotels.
+    for tool_name in ("search_flights", "search_hotels"):
+        if tool_name not in called_tools:
+            errors.append(
+                {
+                    "tool": tool_name,
+                    "error_kind": "never_called",
+                    "error": (
+                        f"The researcher never called {tool_name}; no data was "
+                        "gathered for it."
+                    ),
+                }
+            )
+            print(f"  [{tool_name}] NEVER CALLED by the researcher")
+
+    return {
+        "flight_options": flight_options,
+        "hotel_options": hotel_options,
+        "errors": errors,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -239,10 +319,20 @@ def researcher_node(state: TravelState) -> TravelState:
     result = asyncio.run(_run_research(state))
     state["flight_options"] = result["flight_options"]
     state["hotel_options"] = result["hotel_options"]
+    state["research_errors"] = result["errors"]
+
     print(
         f"  found {len(state['flight_options'])} flight option(s), "
         f"{len(state['hotel_options'])} hotel option(s)"
     )
+    if result["errors"]:
+        # Without this, an exhausted quota and a city with no hotels both look
+        # like "found 0" and the cause is invisible.
+        print(f"  {len(result['errors'])} tool problem(s) — results are incomplete:")
+        for err in result["errors"]:
+            print(f"    - {err['tool']}: [{err['error_kind']}] {err['error']}")
+    else:
+        print("  all tool calls succeeded (any empty list is a genuine no-match)")
     return state
 
 
@@ -423,9 +513,18 @@ def budget_enforcer_node(state: TravelState) -> TravelState:
     # Cheapest trip possible: flight + hotel with no activities.
     floor_cost = flight_cost + hotel_cost
 
+    # A proposal missing its flight or hotel has a floor_cost of 0, which any
+    # budget clears — so the check would "pass" a trip with no way to get there
+    # and nowhere to sleep. Treat missing legs as incomplete data instead.
+    missing = [
+        label
+        for label, value in (("flight", flight), ("hotel", hotel))
+        if not value
+    ]
+
     budget = state.get("budget")
-    passed = budget is not None and total_cost <= budget
     infeasible = budget is not None and floor_cost > budget
+    passed = budget is not None and total_cost <= budget and not missing
 
     proposal["total_cost"] = total_cost
     proposal["floor_cost"] = floor_cost
@@ -435,6 +534,24 @@ def budget_enforcer_node(state: TravelState) -> TravelState:
     state["budget_check_passed"] = passed
     state["budget_infeasible"] = infeasible
     state["round_count"] = state.get("round_count", 0) + 1
+
+    state["data_incomplete"] = bool(missing)
+    if missing:
+        # Prefer the researcher's recorded cause over a generic message: an
+        # exhausted API quota and a genuine no-match need different fixes.
+        causes = [
+            f"{e['tool']} [{e['error_kind']}]: {e['error']}"
+            for e in state.get("research_errors") or []
+        ]
+        reason = f"No {' or '.join(missing)} data available for this trip."
+        if causes:
+            reason += " Cause: " + "; ".join(causes)
+        state["incomplete_reason"] = reason
+        print(f"  INCOMPLETE DATA: {reason}")
+        print(
+            f"  budget check not meaningful without "
+            f"{'/'.join(missing)} — forcing passed=False"
+        )
 
     if infeasible:
         print(
@@ -452,12 +569,20 @@ def budget_enforcer_node(state: TravelState) -> TravelState:
 
 
 def _after_budget(state: TravelState) -> str:
-    """Stop on success or infeasibility; otherwise retry via curator.
+    """Stop on success, infeasibility, or incomplete data; else retry via curator.
 
     Retrying only trims activities, which converges toward the (constant) floor
     cost, so the loop is naturally bounded by the number of activities.
+
+    Incomplete data must terminate too: a proposal missing its flight or hotel
+    can never set ``budget_check_passed``, so without this it would loop
+    trimming activities until it hit the recursion limit.
     """
-    if state.get("budget_check_passed") or state.get("budget_infeasible"):
+    if (
+        state.get("budget_check_passed")
+        or state.get("budget_infeasible")
+        or state.get("data_incomplete")
+    ):
         return "END"
     return "curator"
 

@@ -7,9 +7,11 @@ server (``server.py``) and the test scripts. The two-step Sky Scrapper flow is:
        Skyscanner's ``skyId`` + ``entityId`` (these are NOT plain IATA codes).
     2. ``/api/v1/flights/searchFlights`` — run the actual search using those ids.
 
-Every successful ``search_flights`` result is cached on disk keyed by the search
-parameters, so repeated identical searches during development are served from
-disk and don't burn the 100-requests/month free quota.
+Both steps are cached on disk so development doesn't burn the monthly quota:
+``search_flights`` results are keyed by the search parameters, and step 1's
+airport resolutions are cached separately under ``airport_*`` keys. Step 1 runs
+twice per search (origin + destination), so an uncached search costs three
+requests; with airports cached that drops to one.
 """
 
 from __future__ import annotations
@@ -75,11 +77,38 @@ def _write_cache(key: str, params: dict[str, Any], payload: dict[str, Any]) -> N
     _cache_path(key).write_text(json.dumps(record, indent=2), encoding="utf-8")
 
 
+def _airport_cache_path(query: str) -> Path:
+    """Cache file for one resolved airport lookup.
+
+    Kept in a separate ``airport_`` namespace so these entries are easy to tell
+    apart from cached flight searches when browsing the cache directory.
+    """
+    key = _cache_key({"airport_query": query.strip().lower()})
+    return CACHE_DIR / f"airport_{key}.json"
+
+
 # --------------------------------------------------------------------------- #
 # Sky Scrapper API calls
 # --------------------------------------------------------------------------- #
-def _resolve_airport(query: str) -> dict[str, str]:
-    """Return the top ``{skyId, entityId, name}`` match for a place name."""
+def _resolve_airport(query: str, *, use_cache: bool = True) -> dict[str, str]:
+    """Return the top ``{skyId, entityId, name}`` match for a place name.
+
+    Cached on disk. This lookup runs twice per search (origin + destination),
+    so on the 20-requests/month BASIC plan it accounted for two of the three
+    requests every uncached search burned. A city's skyId/entityId are stable
+    identifiers, so entries are kept indefinitely — delete the ``airport_*``
+    files in the cache directory to force a refresh.
+    """
+    path = _airport_cache_path(query)
+    if use_cache and path.exists():
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            cached = record.get("resolved") or {}
+            if cached.get("skyId") and cached.get("entityId"):
+                return cached
+        except (json.JSONDecodeError, OSError):
+            pass  # unreadable/corrupt entry — fall through to a live lookup
+
     resp = requests.get(
         f"{BASE_URL}/api/v1/flights/searchAirport",
         headers=_headers(),
@@ -104,7 +133,17 @@ def _resolve_airport(query: str) -> dict[str, str]:
     if not sky_id or not entity_id:
         raise SkyScrapperError(f"Airport match for {query!r} was missing ids: {top}")
     name = (top.get("presentation") or {}).get("title", query)
-    return {"skyId": sky_id, "entityId": entity_id, "name": name}
+
+    resolved = {"skyId": sky_id, "entityId": entity_id, "name": name}
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"cached_at": time.time(), "query": query, "resolved": resolved},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return resolved
 
 
 def _summarize_itineraries(payload: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
@@ -164,8 +203,8 @@ def search_flights(
                 "flights": summary,
             }
 
-    origin_ap = _resolve_airport(origin)
-    dest_ap = _resolve_airport(destination)
+    origin_ap = _resolve_airport(origin, use_cache=use_cache)
+    dest_ap = _resolve_airport(destination, use_cache=use_cache)
 
     resp = requests.get(
         f"{BASE_URL}/api/v1/flights/searchFlights",
