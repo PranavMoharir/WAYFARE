@@ -8,10 +8,13 @@ from graph import app as graph_app
 
 app = FastAPI(title="Wayfare Backend")
 
+# The frontend sends no cookies or auth headers, so credentials stay off.
+# "*" origins and allow_credentials=True are mutually exclusive per the CORS
+# spec — browsers reject that pairing outright.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Allow all origins for dev
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
