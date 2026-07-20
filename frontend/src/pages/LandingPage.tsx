@@ -295,6 +295,17 @@ export default function LandingPage() {
                 />
               </div>
               <div className="flex-1 flex items-center gap-2.5 bg-secondary rounded-xl px-4 py-3">
+                <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  type="date"
+                  value={heroCheckout}
+                  onChange={(e) => setHeroCheckout(e.target.value)}
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 mt-3">
+              <div className="flex-[2] flex items-center gap-2.5 bg-secondary rounded-xl px-4 py-3">
                 <Wallet className="w-4 h-4 text-muted-foreground shrink-0" />
                 <input
                   type="number"
@@ -310,7 +321,7 @@ export default function LandingPage() {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
                 onClick={handleHeroSearch}
-                className="bg-foreground text-background font-semibold rounded-xl px-6 py-3 text-sm hover:opacity-90 transition-opacity shrink-0"
+                className="flex-1 bg-foreground text-background font-semibold rounded-xl px-6 py-3 text-sm hover:opacity-90 transition-opacity shrink-0"
               >
                 Search →
               </motion.button>
