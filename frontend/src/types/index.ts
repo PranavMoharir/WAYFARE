@@ -6,6 +6,7 @@ export interface TripRequest {
   destination: string;
   dates: string;        // e.g. "2026-09-15 to 2026-09-18"
   budget: number;
+  num_people: number;
   preferences: string[];
 }
 
@@ -62,6 +63,7 @@ export interface TripResponse {
   destination: string;
   dates: string;
   budget: number;
+  num_people: number;
   preferences: string[];
   flight_options: Flight[];
   hotel_options: Hotel[];
@@ -69,5 +71,7 @@ export interface TripResponse {
   current_proposal: Proposal | null;
   budget_check_passed: boolean;
   budget_infeasible: boolean;
+  data_incomplete?: boolean;
+  incomplete_reason?: string;
   round_count: number;
 }
