@@ -62,6 +62,7 @@ class TravelState(TypedDict, total=False):
     destination: str
     dates: str
     budget: float
+    num_people: int
     preferences: List[str]
     flight_options: List[Dict[str, Any]]
     hotel_options: List[Dict[str, Any]]
@@ -424,6 +425,15 @@ def curator_node(state: TravelState) -> TravelState:
     full_activities = state.get("activities") or []
     if round_count == 0 and not full_activities:
         full_activities = _recommend_local_activities(state)
+        # Deduplicate by name (case-insensitive) to prevent repeated activities
+        seen: set[str] = set()
+        deduped: List[Dict[str, Any]] = []
+        for act in full_activities:
+            key = act.get("name", "").strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(act)
+        full_activities = deduped
     state["activities"] = full_activities
 
     # Drop the `round_count` most expensive activities to reduce cost on retries.

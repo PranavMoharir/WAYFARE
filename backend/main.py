@@ -24,6 +24,7 @@ class TripRequest(BaseModel):
     destination: str
     dates: str
     budget: float
+    num_people: int = 1
     preferences: Optional[List[str]] = None
 
 @app.get("/")
@@ -39,6 +40,7 @@ def plan_trip(request: TripRequest):
         "destination": request.destination,
         "dates": request.dates,
         "budget": request.budget,
+        "num_people": request.num_people,
         "preferences": request.preferences if request.preferences else []
     }
     

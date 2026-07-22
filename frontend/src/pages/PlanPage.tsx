@@ -6,6 +6,7 @@ import {
   MapPin,
   Calendar,
   Wallet,
+  Users,
   ArrowRight,
   ArrowLeft,
   AlertCircle,
@@ -179,6 +180,7 @@ export default function PlanPage() {
   const [checkin, setCheckin] = useState(prefill.checkin || '');
   const [checkout, setCheckout] = useState(prefill.checkout || '');
   const [budget, setBudget] = useState(prefill.budget || '');
+  const [numPeople, setNumPeople] = useState(1);
   const [preferences, setPreferences] = useState<string[]>([]);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -199,6 +201,7 @@ export default function PlanPage() {
     if (checkin && checkout && checkout <= checkin)
       e.checkout = 'Check-out must be after check-in';
     if (!budget || Number(budget) <= 0) e.budget = 'Please enter a valid budget';
+    if (numPeople < 1) e.numPeople = 'At least 1 person required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -215,6 +218,7 @@ export default function PlanPage() {
         destination: destination.trim(),
         dates,
         budget: Number(budget),
+        num_people: numPeople,
         preferences: preferences.length ? preferences : ['sightseeing', 'local food'],
       };
       store.setRequest(request);
@@ -333,7 +337,7 @@ export default function PlanPage() {
               </div>
             </motion.div>
 
-            {/* ── Section 3: Budget ─────────────────────────── */}
+            {/* ── Section 3: Budget & People ─────────────────────────── */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -341,30 +345,48 @@ export default function PlanPage() {
               className="bg-white border border-border rounded-2xl p-6 mb-4"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">
-                Budget
+                Budget & Travellers
               </p>
-              <FormField
-                label="Total trip budget (in INR, including flights & hotel)"
-                error={errors.budget}
-              >
-                <div className={`flex items-center gap-2 bg-secondary rounded-xl transition-colors focus-within:bg-white focus-within:border focus-within:border-foreground border ${errors.budget ? 'border-red-300' : 'border-transparent'}`}>
-                  <span className="pl-4 text-sm font-semibold text-muted-foreground select-none">₹</span>
-                  <input
-                    type="number"
-                    value={budget}
-                    onChange={(e) => { setBudget(e.target.value); setErrors((p) => ({ ...p, budget: undefined })); }}
-                    placeholder="e.g. 80000"
-                    min="0"
-                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-3 pr-4"
-                  />
-                  <div className="flex items-center gap-1.5 pr-4">
-                    <Wallet className="w-4 h-4 text-muted-foreground" />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  label="Total trip budget (in INR)"
+                  error={errors.budget}
+                >
+                  <div className={`flex items-center gap-2 bg-secondary rounded-xl transition-colors focus-within:bg-white focus-within:border focus-within:border-foreground border ${errors.budget ? 'border-red-300' : 'border-transparent'}`}>
+                    <span className="pl-4 text-sm font-semibold text-muted-foreground select-none">₹</span>
+                    <input
+                      type="number"
+                      value={budget}
+                      onChange={(e) => { setBudget(e.target.value); setErrors((p) => ({ ...p, budget: undefined })); }}
+                      placeholder="e.g. 80000"
+                      min="0"
+                      className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none py-3 pr-4"
+                    />
+                    <div className="flex items-center gap-1.5 pr-4">
+                      <Wallet className="w-4 h-4 text-muted-foreground" />
+                    </div>
                   </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  We'll find options that fit within this amount.
-                </p>
-              </FormField>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We'll find options that fit within this amount.
+                  </p>
+                </FormField>
+                <FormField label="Number of travellers" error={errors.numPeople}>
+                  <div className={`flex items-center gap-2.5 bg-secondary rounded-xl px-4 py-3 transition-colors focus-within:bg-white focus-within:border focus-within:border-foreground border ${errors.numPeople ? 'border-red-300' : 'border-transparent'}`}>
+                    <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+                    <input
+                      type="number"
+                      value={numPeople}
+                      onChange={(e) => { setNumPeople(Math.max(1, parseInt(e.target.value) || 1)); setErrors((p) => ({ ...p, numPeople: undefined })); }}
+                      min="1"
+                      max="20"
+                      className="flex-1 bg-transparent text-sm text-foreground outline-none"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Budget will be calculated per person.
+                  </p>
+                </FormField>
+              </div>
             </motion.div>
 
             {/* ── Section 4: Preferences ───────────────────── */}
