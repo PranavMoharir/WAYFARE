@@ -71,16 +71,53 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function FlightCard({ flight, label }: { flight: Flight; label: string }) {
+// The backend flight object carries no origin/destination and names its times
+// `departure` / `arrival` (full ISO datetimes) with `duration_minutes`. Derive
+// display strings here, falling back to the trip's route for the endpoints.
+function formatFlightTime(iso?: string): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return undefined;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function formatFlightDuration(flight: Flight): string | undefined {
+  if (flight.duration) return flight.duration;
+  const m = flight.duration_minutes;
+  if (typeof m === 'number' && m > 0) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return h ? `${h}h ${min}m` : `${min}m`;
+  }
+  return undefined;
+}
+
+function FlightCard({
+  flight,
+  label,
+  origin,
+  destination,
+}: {
+  flight: Flight;
+  label: string;
+  origin?: string;
+  destination?: string;
+}) {
+  const departureTime = formatFlightTime(flight.departure) ?? flight.departure_time;
+  const arrivalTime = formatFlightTime(flight.arrival) ?? flight.arrival_time;
+  const duration = formatFlightDuration(flight);
+  const from = flight.origin || origin || '—';
+  const to = flight.destination || destination || '—';
+
   return (
     <div className="bg-white border border-border rounded-2xl p-4 sm:p-5">
       <SectionLabel>{label}</SectionLabel>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="text-center">
-            <p className="text-xl sm:text-2xl font-bold">{flight.origin || '—'}</p>
-            {flight.departure_time && (
-              <p className="text-xs text-muted-foreground mt-0.5">{flight.departure_time}</p>
+            <p className="text-xl sm:text-2xl font-bold">{from}</p>
+            {departureTime && (
+              <p className="text-xs text-muted-foreground mt-0.5">{departureTime}</p>
             )}
           </div>
           <div className="flex flex-col items-center gap-1">
@@ -89,14 +126,14 @@ function FlightCard({ flight, label }: { flight: Flight; label: string }) {
               <Plane className="w-4 h-4" />
               <div className="w-8 sm:w-12 h-px bg-border" />
             </div>
-            {flight.duration && (
-              <p className="text-xs text-muted-foreground">{flight.duration}</p>
+            {duration && (
+              <p className="text-xs text-muted-foreground">{duration}</p>
             )}
           </div>
           <div className="text-center">
-            <p className="text-xl sm:text-2xl font-bold">{flight.destination || '—'}</p>
-            {flight.arrival_time && (
-              <p className="text-xs text-muted-foreground mt-0.5">{flight.arrival_time}</p>
+            <p className="text-xl sm:text-2xl font-bold">{to}</p>
+            {arrivalTime && (
+              <p className="text-xs text-muted-foreground mt-0.5">{arrivalTime}</p>
             )}
           </div>
         </div>
@@ -134,14 +171,17 @@ function HotelCard({ hotel, nights, people }: { hotel: HotelType; nights: number
             </p>
           )}
           {hotel.rating !== undefined && (
+            // Backend ratings use Booking.com's 0–10 scale; halve to map onto the
+            // 5-star widget so the fill and the label are both correct (e.g. a
+            // 9.8 backend rating renders as ~5 filled stars and "4.9/5", not "9.8/5").
             <div className="flex items-center gap-1 mt-2">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Star
                   key={i}
-                  className={`w-3.5 h-3.5 ${i < Math.round(hotel.rating!) ? 'fill-amber-400 text-amber-400' : 'text-border'}`}
+                  className={`w-3.5 h-3.5 ${i < Math.round(hotel.rating! / 2) ? 'fill-amber-400 text-amber-400' : 'text-border'}`}
                 />
               ))}
-              <span className="text-xs text-muted-foreground ml-1">{hotel.rating}/5</span>
+              <span className="text-xs text-muted-foreground ml-1">{(hotel.rating / 2).toFixed(1)}/5</span>
             </div>
           )}
           {hotel.amenities && hotel.amenities.length > 0 && (
@@ -377,7 +417,7 @@ export default function ResultsPage() {
           {/* Flight */}
           {proposal?.flight && (
             <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }} className="mb-4">
-              <FlightCard flight={proposal.flight} label={`Flight · per person${peopleCount > 1 ? ` (×${peopleCount})` : ''}`} />
+              <FlightCard flight={proposal.flight} label={`Flight · per person${peopleCount > 1 ? ` (×${peopleCount})` : ''}`} origin={request?.origin} destination={destination} />
             </motion.div>
           )}
 

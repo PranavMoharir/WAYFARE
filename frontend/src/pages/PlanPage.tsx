@@ -108,7 +108,17 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center gap-8 px-6"
+          // `pointer-events-none` is unconditional and deliberate: if the exit
+          // animation or AnimatePresence unmount ever stalls (which we observed —
+          // the div lingering at opacity 0 in the DOM after a failed request), an
+          // interactive overlay would silently swallow every click until a reload.
+          // AnimatePresence freezes the exiting element's props, so tying
+          // pointer-events to `visible` or to the exit target is itself
+          // timing-dependent and can't guarantee this. The overlay is purely a
+          // visual loader — the submit button is `disabled` while it's up — so it
+          // never needs to capture clicks. Making it inert in every state is the
+          // only fix that holds regardless of animation/unmount timing.
+          className="fixed inset-0 z-50 pointer-events-none bg-background/95 backdrop-blur-sm flex flex-col items-center justify-center gap-8 px-6"
         >
           {/* Spinner */}
           <div className="relative w-20 h-20">
