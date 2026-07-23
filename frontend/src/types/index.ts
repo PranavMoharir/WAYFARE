@@ -17,8 +17,16 @@ export interface Flight {
   flight_number?: string;
   origin?: string;
   destination?: string;
+  // The backend (sky_scrapper.py) emits these as full ISO datetimes named
+  // `departure` / `arrival`, with `duration_minutes` (number) and `stops`.
+  // The `*_time` / `duration` (string) variants are kept for forward-compat
+  // in case the shape changes, but the ISO fields are what actually arrive.
+  departure?: string;
+  arrival?: string;
   departure_time?: string;
   arrival_time?: string;
+  duration_minutes?: number;
+  stops?: number;
   price?: number | string;
   duration?: string;
   [key: string]: unknown; // allow extra fields from backend
