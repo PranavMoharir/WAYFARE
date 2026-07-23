@@ -286,6 +286,8 @@ export default function ResultsPage() {
           body * { visibility: hidden; }
           #wayfare-print-area, #wayfare-print-area * { visibility: visible; }
           #wayfare-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          /* Force the banner/tint background colors to render in the exported PDF */
+          #wayfare-print-area, #wayfare-print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .no-print { display: none !important; }
           @page { margin: 15mm; }
         }
@@ -382,7 +384,7 @@ export default function ResultsPage() {
                   <div className="flex items-start justify-between text-sm gap-2">
                     <span className="flex items-center gap-2 text-muted-foreground">
                       <Hotel className="w-4 h-4 shrink-0" />
-                      <span>Hotel ({nights} night{nights !== 1 ? 's' : ''})<span className="text-xs ml-1">— shared</span></span>
+                      <span>Hotel ({nights} night{nights !== 1 ? 's' : ''}){peopleCount > 1 && <span className="text-xs ml-1">— shared</span>}</span>
                     </span>
                     <span className="font-semibold text-right">
                       {formatINR(typeof proposal.hotel.price_per_night === 'string'
