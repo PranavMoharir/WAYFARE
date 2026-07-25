@@ -1,6 +1,7 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import gsap from 'gsap';
 import {
   Plane,
   Hotel,
@@ -207,14 +208,11 @@ function HotelCard({ hotel, nights, people }: { hotel: HotelType; nights: number
   );
 }
 
-function ActivityCard({ activity, index }: { activity: Activity; index: number }) {
+function ActivityCard({ activity }: { activity: Activity }) {
   const colorClass = CATEGORY_COLORS[activity.category] || 'bg-secondary text-foreground border-border';
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.35, delay: index * 0.05 }}
+    <div
+      data-reveal="activity"
       className="bg-white border border-border rounded-2xl p-4 sm:p-5 flex flex-col gap-3"
     >
       <div className="flex items-start justify-between gap-3">
@@ -228,7 +226,7 @@ function ActivityCard({ activity, index }: { activity: Activity; index: number }
         <Clock className="w-3.5 h-3.5" />
         {activity.estimated_duration}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -237,6 +235,25 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const { request, response, reset } = useTripStore();
   const [isPrinting, setIsPrinting] = useState(false);
+  const revealRef = useRef<HTMLDivElement>(null);
+
+  // GSAP staggered reveal for the results — budget banner, then cost summary,
+  // then the activity cards populate in rather than snapping in all at once.
+  // Scoped to the results container; clearProps ensures nothing lingers with a
+  // transform/opacity that could block clicks or break the print/PDF layout.
+  // (Framer Motion still owns the flight/hotel card entrances and PlanPage.)
+  useLayoutEffect(() => {
+    if (!revealRef.current) return;
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({
+        defaults: { ease: 'power2.out', duration: 0.5, clearProps: 'transform,opacity,visibility' },
+      });
+      tl.from('[data-reveal="banner"]', { y: 16, autoAlpha: 0 })
+        .from('[data-reveal="summary"]', { y: 16, autoAlpha: 0 }, '-=0.35')
+        .from('[data-reveal="activity"]', { y: 16, autoAlpha: 0, stagger: 0.06 }, '-=0.2');
+    }, revealRef.current);
+    return () => ctx.revert();
+  }, []);
 
   function handleExportPdf() {
     setIsPrinting(true);
@@ -327,7 +344,7 @@ export default function ResultsPage() {
           </div>
         </nav>
 
-        <div id="wayfare-print-area" className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        <div id="wayfare-print-area" ref={revealRef} className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
 
           {/* Trip Header */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mb-6 sm:mb-8">
@@ -343,8 +360,8 @@ export default function ResultsPage() {
 
           {/* Budget Banner */}
           {proposal && (
-            <motion.div
-              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}
+            <div
+              data-reveal="banner"
               className={`flex items-start gap-3 rounded-2xl p-4 mb-5 border ${budget_infeasible ? 'bg-red-50 border-red-200' : budget_check_passed ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}
             >
               {budget_infeasible ? <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" /> : budget_check_passed ? <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" /> : <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />}
@@ -363,12 +380,12 @@ export default function ResultsPage() {
                 <p className="text-base sm:text-lg font-bold">{formatINR(proposal.total_cost)}</p>
                 <p className="text-xs text-muted-foreground">total estimate</p>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Cost Summary */}
           {proposal && (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }} className="bg-white border border-border rounded-2xl p-4 sm:p-5 mb-5">
+            <div data-reveal="summary" className="bg-white border border-border rounded-2xl p-4 sm:p-5 mb-5">
               <SectionLabel>Cost Summary · {peopleCount} traveller{peopleCount !== 1 ? 's' : ''}</SectionLabel>
               <div className="space-y-3">
                 {proposal.flight && (
@@ -413,7 +430,7 @@ export default function ResultsPage() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Flight */}
@@ -432,16 +449,16 @@ export default function ResultsPage() {
 
           {/* Activities */}
           {proposal && proposal.activities.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="mb-10">
+            <div className="mb-10">
               <div className="bg-white border border-border rounded-2xl p-4 sm:p-5">
                 <SectionLabel>Things To Do in {destination} · {proposal.activities.length} experiences</SectionLabel>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {proposal.activities.map((a, i) => (
-                    <ActivityCard key={`${a.name}-${i}`} activity={a} index={i} />
+                    <ActivityCard key={`${a.name}-${i}`} activity={a} />
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* No proposal */}

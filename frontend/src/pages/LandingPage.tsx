@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import gsap from 'gsap';
 import { ArrowRight, Plane, MapPin, Calendar, Wallet } from 'lucide-react';
 import HeroBackground from '../components/HeroBackground';
 import Logo from '../components/Logo';
@@ -79,6 +80,26 @@ function DestPill({ label }: { label: string }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const navigate = useNavigate();
+  const heroRef = useRef<HTMLElement>(null);
+
+  // GSAP hero entrance — scoped to this section only. Framer Motion still owns
+  // the button hover/tap interactions and every other section on the page; this
+  // just replaces the hero's entrance so heading/subtext/form-card reveal in a
+  // stagger and the (heavy) background settles in. Runs immediately on mount —
+  // never gated on image load — so it can't make the page feel slower.
+  useLayoutEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from('[data-hero-bg]', {
+        scale: 1.08, autoAlpha: 0.4, duration: 1.3, ease: 'power2.out',
+        clearProps: 'transform,opacity',
+      });
+      gsap.from('[data-hero]', {
+        y: 26, autoAlpha: 0, duration: 0.6, ease: 'power3.out', stagger: 0.12,
+        clearProps: 'transform,opacity,visibility',
+      });
+    }, heroRef.current ?? undefined);
+    return () => ctx.revert();
+  }, []);
 
   // Hero search card controlled state
   const [heroOrigin, setHeroOrigin] = useState('');
@@ -175,28 +196,23 @@ export default function LandingPage() {
       </motion.nav>
 
       {/* ── Hero ──────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden w-full pt-28 pb-20">
-        <HeroBackground />
+      <section ref={heroRef} className="relative overflow-hidden w-full pt-28 pb-20">
+        <div data-hero-bg className="absolute inset-0 z-0">
+          <HeroBackground />
+        </div>
         
         <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
           {/* "New" badge */}
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="inline-flex items-center gap-2 mb-8"
-          >
+          <div data-hero className="inline-flex items-center gap-2 mb-8">
             <span className="badge-pill bg-white text-foreground">NEW</span>
             <span className="text-sm text-white/80">
               Plan your perfect trip in minutes, not hours
             </span>
-          </motion.div>
+          </div>
 
           {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+          <h1
+            data-hero
             className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.08] mb-6 text-white"
           >
             Travel smarter,
@@ -211,24 +227,20 @@ export default function LandingPage() {
                 style={{ width: 2, height: '0.8em', background: '#ffffff', verticalAlign: 'middle' }}
               />
             </span>
-          </motion.h1>
+          </h1>
 
           {/* Sub-headline */}
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.35 }}
+          <p
+            data-hero
             className="text-lg text-white/90 max-w-xl mx-auto leading-relaxed mb-10"
           >
             Tell us where you want to go and your budget. We handle flights, hotels,
             and things to do — all in one beautifully organised plan.
-          </motion.p>
+          </p>
 
           {/* CTAs */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
+          <div
+            data-hero
             className="flex flex-col sm:flex-row items-center justify-center gap-3"
           >
             <motion.button
@@ -250,13 +262,11 @@ export default function LandingPage() {
             >
               See how it works
             </motion.button>
-          </motion.div>
+          </div>
 
         {/* Hero search card — fully functional */}
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.7 }}
+          <div
+            data-hero
             className="mt-16 bg-white border border-border rounded-2xl shadow-md p-6 max-w-2xl mx-auto text-left"
           >
             <p className="text-sm text-muted-foreground mb-5 font-medium">
@@ -326,7 +336,7 @@ export default function LandingPage() {
                 Search →
               </motion.button>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
