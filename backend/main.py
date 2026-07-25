@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI, Request
@@ -11,6 +12,8 @@ from slowapi.util import get_remote_address
 
 # Import the compiled LangGraph app
 from graph import app as graph_app
+
+logger = logging.getLogger("wayfare")
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
 # /plan-trip is expensive: each call burns RapidAPI quota (only 20 req/month)
@@ -65,6 +68,42 @@ class TripRequest(BaseModel):
     num_people: int = 1
     preferences: Optional[List[str]] = None
 
+
+# Fields from the graph's final state that are safe to return to the client.
+# Everything else (notably ``research_errors``, which holds raw upstream API
+# error strings and endpoint URLs) stays server-side.
+_PUBLIC_FIELDS = (
+    "origin", "destination", "dates", "budget", "num_people", "preferences",
+    "flight_options", "hotel_options", "activities", "current_proposal",
+    "budget_check_passed", "budget_infeasible", "data_incomplete",
+    "incomplete_reason", "round_count",
+)
+
+# Shown to users instead of the graph's detailed ``incomplete_reason`` (which
+# echoes upstream HTTP errors and API URLs). The detail is logged, not returned.
+_GENERIC_INCOMPLETE_REASON = (
+    "We couldn't retrieve live flight or hotel data for this trip right now. "
+    "Please try again in a little while."
+)
+
+
+def _public_response(state: dict) -> dict:
+    """Return only client-safe fields, with a sanitised incomplete reason.
+
+    Whitelisting (rather than returning the full state) keeps internal
+    diagnostics — and any future internal fields — from leaking to the client.
+    """
+    if state.get("research_errors") or state.get("data_incomplete"):
+        logger.warning(
+            "plan-trip incomplete/errors: reason=%r research_errors=%r",
+            state.get("incomplete_reason"),
+            state.get("research_errors"),
+        )
+    public = {k: state[k] for k in _PUBLIC_FIELDS if k in state}
+    if public.get("data_incomplete"):
+        public["incomplete_reason"] = _GENERIC_INCOMPLETE_REASON
+    return public
+
 @app.get("/")
 def root():
     return {
@@ -86,6 +125,6 @@ def plan_trip(request: Request, payload: TripRequest):
         "preferences": payload.preferences if payload.preferences else []
     }
 
-    # Run the graph synchronously and return the final state
+    # Run the graph synchronously, then return only client-safe fields.
     final_state = graph_app.invoke(initial_state)
-    return final_state
+    return _public_response(final_state)
