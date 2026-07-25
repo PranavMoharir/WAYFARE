@@ -26,6 +26,19 @@ from graph import app as graph_app
 # X-Forwarded-For handling there for accurate per-client limits.
 PLAN_TRIP_RATE_LIMIT = os.getenv("PLAN_TRIP_RATE_LIMIT", "10/minute")
 
+# ── CORS ─────────────────────────────────────────────────────────────────────
+# Only allow the frontend origin(s) to call the API from a browser, rather than
+# any site ("*"). Comma-separated allowlist; defaults to local dev. In
+# production set ALLOWED_ORIGINS to your deployed frontend origin(s), e.g.
+# "https://wayfare.example.com".
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174"
+    ).split(",")
+    if o.strip()
+]
+
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(title="Wayfare Backend")
@@ -33,15 +46,15 @@ app.state.limiter = limiter
 # Returns HTTP 429 (with a Retry-After header) when a client exceeds the limit.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# The frontend sends no cookies or auth headers, so credentials stay off.
-# "*" origins and allow_credentials=True are mutually exclusive per the CORS
-# spec — browsers reject that pairing outright.
+# Restrict CORS to the known frontend origin(s). The frontend sends no cookies
+# or auth headers, so credentials stay off; methods/headers are narrowed to
+# what the app actually uses (GET / and POST /plan-trip with a JSON body).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all origins for dev
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 class TripRequest(BaseModel):
