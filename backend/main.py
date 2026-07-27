@@ -1,8 +1,10 @@
+import asyncio
 import logging
 import math
 import os
+from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
@@ -29,6 +31,19 @@ logger = logging.getLogger("wayfare")
 # IP is the proxy's unless it forwards the real one — configure trusted
 # X-Forwarded-For handling there for accurate per-client limits.
 PLAN_TRIP_RATE_LIMIT = os.getenv("PLAN_TRIP_RATE_LIMIT", "10/minute")
+
+# ── Concurrency + timeout ────────────────────────────────────────────────────
+# graph_app.invoke() is a synchronous, 60-90s CPU/IO job. Run it in a bounded
+# thread pool so at most PLAN_TRIP_MAX_CONCURRENCY plans run at once (extra
+# requests get 503 rather than piling up and exhausting the server), and cap
+# each with a wall-clock timeout (504) so a stuck upstream can't tie a slot up
+# forever. Both are env-tunable.
+PLAN_TRIP_MAX_CONCURRENCY = int(os.getenv("PLAN_TRIP_MAX_CONCURRENCY", "2"))
+PLAN_TRIP_TIMEOUT_SECONDS = float(os.getenv("PLAN_TRIP_TIMEOUT_SECONDS", "150"))
+_plan_executor = ThreadPoolExecutor(
+    max_workers=PLAN_TRIP_MAX_CONCURRENCY, thread_name_prefix="plan-trip"
+)
+_plan_slots = asyncio.Semaphore(PLAN_TRIP_MAX_CONCURRENCY)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
 # Only allow the frontend origin(s) to call the API from a browser, rather than
@@ -141,10 +156,16 @@ def root():
 
 @app.post("/plan-trip")
 @limiter.limit(PLAN_TRIP_RATE_LIMIT)
-def plan_trip(request: Request, payload: TripRequest):
+async def plan_trip(request: Request, payload: TripRequest):
     # ``request`` is required by slowapi to identify the caller (its IP); the
-    # trip data comes in as ``payload``. The limit is checked before this body
-    # runs, so a throttled request never triggers the expensive graph invoke.
+    # trip data comes in as ``payload``. The rate limit is checked before this
+    # body runs, so a throttled request never triggers the expensive work.
+    if _plan_slots.locked():
+        raise HTTPException(
+            status_code=503,
+            detail="The trip planner is busy right now. Please try again shortly.",
+        )
+
     initial_state = {
         "origin": payload.origin,
         "destination": payload.destination,
@@ -154,6 +175,20 @@ def plan_trip(request: Request, payload: TripRequest):
         "preferences": payload.preferences if payload.preferences else []
     }
 
-    # Run the graph synchronously, then return only client-safe fields.
-    final_state = graph_app.invoke(initial_state)
+    # Offload the blocking graph run to the bounded pool with a timeout, so a
+    # single request can't hold a worker forever and concurrency stays capped.
+    async with _plan_slots:
+        loop = asyncio.get_running_loop()
+        try:
+            final_state = await asyncio.wait_for(
+                loop.run_in_executor(_plan_executor, graph_app.invoke, initial_state),
+                timeout=PLAN_TRIP_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("plan-trip timed out after %ss", PLAN_TRIP_TIMEOUT_SECONDS)
+            raise HTTPException(
+                status_code=504,
+                detail="Trip planning took too long. Please try again.",
+            )
+
     return _public_response(final_state)
