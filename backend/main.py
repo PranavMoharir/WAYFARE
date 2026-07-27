@@ -60,7 +60,18 @@ ALLOWED_ORIGINS = [
 
 limiter = Limiter(key_func=get_remote_address)
 
-app = FastAPI(title="Wayfare Backend")
+# ── API docs ─────────────────────────────────────────────────────────────────
+# FastAPI's interactive docs (/docs, /redoc) and schema (/openapi.json) expose
+# the whole API surface. Off by default; set ENABLE_API_DOCS=true to enable
+# them (e.g. locally). Keep them disabled in production.
+_ENABLE_DOCS = os.getenv("ENABLE_API_DOCS", "false").lower() in ("1", "true", "yes")
+
+app = FastAPI(
+    title="Wayfare Backend",
+    docs_url="/docs" if _ENABLE_DOCS else None,
+    redoc_url="/redoc" if _ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if _ENABLE_DOCS else None,
+)
 app.state.limiter = limiter
 # Returns HTTP 429 (with a Retry-After header) when a client exceeds the limit.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
