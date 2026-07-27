@@ -1,9 +1,10 @@
 import logging
+import math
 import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -61,12 +62,40 @@ app.add_middleware(
 )
 
 class TripRequest(BaseModel):
-    origin: str
-    destination: str
-    dates: str
-    budget: float
-    num_people: int = 1
-    preferences: Optional[List[str]] = None
+    # Bound every field so a caller can't send absurd values (huge budgets,
+    # thousands of travellers, megabyte strings) into the graph and the
+    # downstream APIs/LLM prompts. Invalid input is rejected with HTTP 422.
+    origin: str = Field(min_length=1, max_length=100)
+    destination: str = Field(min_length=1, max_length=100)
+    dates: str = Field(min_length=1, max_length=100)
+    budget: float = Field(gt=0, le=1_000_000_000)
+    num_people: int = Field(default=1, ge=1, le=20)
+    preferences: Optional[List[str]] = Field(default=None, max_length=20)
+
+    @field_validator("origin", "destination", "dates")
+    @classmethod
+    def _stripped_nonblank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("must not be blank")
+        return v
+
+    @field_validator("budget")
+    @classmethod
+    def _finite_budget(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("must be a finite number")
+        return v
+
+    @field_validator("preferences")
+    @classmethod
+    def _clean_preferences(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return v
+        cleaned = [p.strip() for p in v if isinstance(p, str) and p.strip()]
+        if any(len(p) > 50 for p in cleaned):
+            raise ValueError("each preference must be at most 50 characters")
+        return cleaned
 
 
 # Fields from the graph's final state that are safe to return to the client.
