@@ -1,33 +1,37 @@
 # WAYFARE backend — merged dependencies for the researcher/curator pipeline.
 # Combines the former root graph/MCP-server deps with Dhruv's curator/RAG deps.
+#
+# Versions are pinned to what was tested, for reproducible installs/deploys.
+# To refresh: upgrade in the venv, run the smoke test, then update the pins
+# here (and consider `pip-audit` to check the pinned set for known CVEs).
 
 # --- Web framework (FastAPI wrapper) ---
-fastapi
-uvicorn
+fastapi==0.139.0
+uvicorn==0.51.0
 
 # --- Rate limiting for the /plan-trip endpoint (main.py) ---
-slowapi
+slowapi==0.1.10
 
 # --- Config ---
-python-dotenv
+python-dotenv==1.2.2
 
 # --- LangGraph orchestration + MCP tool servers ---
-langgraph
-langchain-mcp-adapters
-mcp
+langgraph==1.2.8
+langchain-mcp-adapters==0.3.0
+mcp==1.28.1
 
 # --- LangChain ecosystem ---
-langchain
-langchain-core
-langchain-community
-langchain-text-splitters
-langchain-chroma
-langchain-huggingface
-langchain-groq
+langchain==1.3.12
+langchain-core==1.4.9
+langchain-community==0.4.2
+langchain-text-splitters==1.1.2
+langchain-chroma==1.1.0
+langchain-huggingface==1.2.2
+langchain-groq==1.1.3
 
 # --- RAG: vector store + embeddings ---
-chromadb
-sentence-transformers
+chromadb==1.5.9
+sentence-transformers==5.6.0
 
 # --- HTTP client (flight/hotel RapidAPI calls) ---
-requests
+requests==2.34.2
