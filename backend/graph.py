@@ -102,6 +102,31 @@ def _mcp_connections() -> Dict[str, Dict[str, Any]]:
     }
 
 
+# One long-lived client (holds only the connection specs — no subprocess is
+# spawned until a tool is used) reused across all requests. The tool list is
+# static, so we discover it once and cache it: this avoids re-running
+# get_tools() on every /plan-trip, which each time spawned a short-lived MCP
+# session per server just to re-enumerate the same two tools. Individual tool
+# calls still open and close their own session per call (that is the adapter's
+# model, and those subprocesses are reaped — verified), so this is safe under
+# the concurrent request cap.
+_mcp_client = MultiServerMCPClient(_mcp_connections())
+_mcp_tools_cache: Optional[List[Any]] = None
+
+
+async def _get_mcp_tools() -> List[Any]:
+    """Return the MCP tools, discovering them once and caching the result.
+
+    A rare double-discovery on a cold start (two requests racing before the
+    cache is populated) is harmless — both produce equivalent tools — so no
+    lock is needed (and an asyncio.Lock couldn't span the per-request loops).
+    """
+    global _mcp_tools_cache
+    if _mcp_tools_cache is None:
+        _mcp_tools_cache = await _mcp_client.get_tools()
+    return _mcp_tools_cache
+
+
 def _parse_tool_output(raw: Any) -> Dict[str, Any]:
     """Normalise a LangChain MCP tool result into a plain dict.
 
@@ -175,8 +200,7 @@ def _build_llm() -> ChatGroq:
 
 async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
     """Drive the LLM + the MCP tools and collect flight/hotel options."""
-    client = MultiServerMCPClient(_mcp_connections())
-    tools = await client.get_tools()
+    tools = await _get_mcp_tools()
     tools_by_name = {t.name: t for t in tools}
 
     llm = _build_llm()
