@@ -5,6 +5,9 @@
 fastapi
 uvicorn
 
+# --- Rate limiting for the /plan-trip endpoint (main.py) ---
+slowapi
+
 # --- Config ---
 python-dotenv
 
