@@ -66,8 +66,22 @@ You need your own keys — do not reuse anyone else's, and never commit real key
 **RapidAPI key** (powers real flight and hotel search):
 
 1. Sign up at [rapidapi.com](https://rapidapi.com/)
-2. Subscribe (free tier) to the flight search API ("Sky Scrapper") and the hotel search API (Booking.com via the DataCrawler provider) — check `mcp_servers/flight_server/sky_scrapper.py` and `mcp_servers/hotel_server/booking_com.py` for the exact API names/hosts they call if you need to find the right listing.
+2. Subscribe (free tier) to **both** listings — the flight search API and the hotel search API. One `RAPIDAPI_KEY` covers both, but they are separate subscriptions and each must be active or you'll get `403 {"message":"You are not subscribed to this API."}` from that half of the app.
 3. Copy your RapidAPI key from your dashboard.
+
+**Match listings by host, not by name.** RapidAPI listings get renamed and there are several near-identical clones of each of these. The authoritative check is the `x-rapidapi-host` line in the code snippet on a listing's **Endpoints** tab — it must equal the host hardcoded in our client:
+
+| What we call | Host (must match exactly) | Hardcoded in |
+| --- | --- | --- |
+| Flights | `sky-scrapper.p.rapidapi.com` | `mcp_servers/flight_server/sky_scrapper.py` |
+| Hotels | `booking-com15.p.rapidapi.com` | `mcp_servers/hotel_server/booking_com.py` |
+
+The flight listing (publisher `apiheya`, slug `sky-scrapper`) was **renamed from "Sky Scrapper" to "Air Scraper"** — same URL and same host, so nothing in our code changed, but searching for the old name will send you to an unrelated clone whose subscription won't authorize our host.
+
+Two gotchas worth knowing before you burn an afternoon on them:
+
+* **Quota is per account, not per key.** All apps under one RapidAPI account share one 20-requests/month pool per API. Generating a fresh key, or a teammate subscribing on *their* account, gives you nothing — you need a subscription on the account whose key is in your `.env`.
+* **Read the status code.** `401` = bad key. `403 "not subscribed"` = valid key, but that account has no subscription to that host. `429` = subscribed, monthly quota spent. Only `429` means you actually have to wait.
 
 ### 5. Set up your `.env` file
 
@@ -87,6 +101,21 @@ RAPIDAPI_KEY=your_key_here
 (If `.env.example` doesn't exist yet in your checkout, check `mcp_servers/flight_server/sky_scrapper.py`, `mcp_servers/hotel_server/booking_com.py`, and `services/groq_service.py` for the exact `os.getenv(...)` calls — those are the authoritative list of what's actually required.)
 
 Optional: `HF_TOKEN` (a free HuggingFace token) isn't required, but without it you'll see a rate-limit warning when the embedding model downloads. Get one at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) if you want to silence that.
+
+### Optional: backend configuration (API server)
+
+Beyond the two API keys above, the FastAPI server (`backend/main.py`, run with `uvicorn main:app`) reads a handful of optional tuning variables. They all have safe defaults, so you only need to set them (in `.env` or the deploy environment) to change behaviour. They do **not** affect the `test_graph.py` smoke test — only the HTTP API.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:5174` | Comma-separated CORS allowlist — the browser origins allowed to call the API. **In production, set this to your deployed frontend origin** (e.g. `https://wayfare.example.com`); it's no longer a wildcard. |
+| `PLAN_TRIP_RATE_LIMIT` | `10/minute` | Per-client-IP rate limit on `POST /plan-trip`. Any slowapi limit string, e.g. `5/minute` or `3/minute;100/day`. Over-limit requests get `429`. |
+| `PLAN_TRIP_MAX_CONCURRENCY` | `2` | How many `/plan-trip` runs may execute at once; extra requests get `503`. Raise only if the host can handle more concurrent 60–90s jobs. |
+| `PLAN_TRIP_TIMEOUT_SECONDS` | `150` | Wall-clock cap for a single `/plan-trip` run; a run that exceeds it returns `504`. |
+| `ENABLE_API_DOCS` | `false` | Set `true` to expose the interactive docs (`/docs`, `/redoc`, `/openapi.json`). **Keep off in production** — they're disabled by default. |
+| `MAX_CACHED_DESTINATIONS` | `50` | How many destination RAG corpora ChromaDB retains before the least-recently-indexed are evicted (bounds on-disk growth). |
+
+> Note: the FastAPI wrapper referenced as "planned" earlier in this guide now exists (`backend/main.py`). Run it with `uvicorn main:app --reload` from `backend/` (venv active).
 
 ### 6. Run the smoke test
 
