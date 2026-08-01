@@ -276,7 +276,7 @@ export default function PlanPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.1 }}
-              className="bg-white border border-border rounded-2xl p-6 mb-4"
+              className="bg-white border border-border rounded-2xl p-6 mb-4 hover:shadow-md hover:shadow-black/5 transition-shadow duration-300"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">
                 Route
@@ -314,7 +314,7 @@ export default function PlanPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.15 }}
-              className="bg-white border border-border rounded-2xl p-6 mb-4"
+              className="bg-white border border-border rounded-2xl p-6 mb-4 hover:shadow-md hover:shadow-black/5 transition-shadow duration-300"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">
                 Travel Dates
@@ -352,7 +352,7 @@ export default function PlanPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
-              className="bg-white border border-border rounded-2xl p-6 mb-4"
+              className="bg-white border border-border rounded-2xl p-6 mb-4 hover:shadow-md hover:shadow-black/5 transition-shadow duration-300"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-5">
                 Budget & Travellers
@@ -404,7 +404,7 @@ export default function PlanPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.25 }}
-              className="bg-white border border-border rounded-2xl p-6 mb-6"
+              className="bg-white border border-border rounded-2xl p-6 mb-6 hover:shadow-md hover:shadow-black/5 transition-shadow duration-300"
             >
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
                 What do you love? <span className="normal-case font-normal">(optional)</span>

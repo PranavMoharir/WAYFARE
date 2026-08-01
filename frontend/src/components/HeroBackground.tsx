@@ -16,11 +16,11 @@ export default function HeroBackground() {
     });
   }, []);
 
-  // Cycle images every 5 seconds
+  // Cycle images every 6 seconds (slightly longer for Ken Burns to breathe)
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % IMAGES.length);
-    }, 5000);
+    }, 6000);
     return () => clearInterval(timer);
   }, []);
 
@@ -37,11 +37,17 @@ export default function HeroBackground() {
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${
             idx === currentIndex ? 'opacity-100' : 'opacity-0'
           }`}
+          style={
+            idx === currentIndex
+              ? { animation: 'ken-burns 12s ease-in-out infinite alternate' }
+              : undefined
+          }
         />
       ))}
-      
+
       {/* Dark gradient scrim overlay for text legibility */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/25 to-black/10" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/50" />
     </div>
   );
 }
+

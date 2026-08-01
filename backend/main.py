@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import math
 import os
@@ -7,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+import requests as http_requests
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -203,3 +205,87 @@ async def plan_trip(request: Request, payload: TripRequest):
             )
 
     return _public_response(final_state)
+
+
+# ── AI Travel Assistant Chat ─────────────────────────────────────────────────
+CHAT_RATE_LIMIT = os.getenv("CHAT_RATE_LIMIT", "30/minute")
+GROQ_CHAT_MODEL = os.getenv("GROQ_CHAT_MODEL", "llama-3.3-70b-versatile")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+TRAVEL_SYSTEM_PROMPT = """You are Wayfare AI, a friendly and knowledgeable travel assistant. You help users with:
+- Trip planning and destination recommendations
+- Flight and hotel advice
+- Local cuisine, culture, and customs
+- Travel budgeting and money-saving tips
+- Visa and passport requirements
+- Packing lists and travel essentials
+- Safety tips and health precautions for travelers
+- Transportation options at destinations
+- Seasonal travel advice and best times to visit
+- Activities, sightseeing, and hidden gems
+
+IMPORTANT RULES:
+1. ONLY answer questions related to travel, tourism, hospitality, geography, cultures, and related topics.
+2. If a user asks about anything NOT related to travel (e.g., coding, math, politics, medical advice, etc.), politely decline and redirect them to ask a travel-related question instead. Say something like: "I'm your travel assistant, so I can only help with travel-related questions! 🌍 Ask me about destinations, flights, hotels, or anything travel-related."
+3. Keep responses concise but helpful. Use bullet points for lists.
+4. Be warm, enthusiastic, and use occasional travel-related emojis (✈️ 🏨 🌴 🗺️ etc.)
+5. If recommending destinations, consider budget, season, and traveler preferences when mentioned.
+6. Always be honest — if you don't know something specific (like exact current prices), say so and suggest how to find out."""
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage] = Field(min_length=1, max_length=50)
+
+
+def _call_groq_chat(messages: List[Dict[str, Any]]) -> str:
+    """Synchronous call to Groq chat completions API."""
+    resp = http_requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": GROQ_CHAT_MODEL,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 1024,
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
+
+
+@app.post("/chat")
+@limiter.limit(CHAT_RATE_LIMIT)
+async def chat(request: Request, payload: ChatRequest):
+    if not GROQ_API_KEY:
+        raise HTTPException(status_code=500, detail="Chat service is not configured.")
+
+    # Build the message list with the travel-only system prompt
+    messages: List[Dict[str, Any]] = [
+        {"role": "system", "content": TRAVEL_SYSTEM_PROMPT}
+    ]
+    for msg in payload.messages:
+        messages.append({"role": msg.role, "content": msg.content})
+
+    loop = asyncio.get_running_loop()
+    try:
+        reply = await asyncio.wait_for(
+            loop.run_in_executor(None, _call_groq_chat, messages),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Chat request timed out.")
+    except Exception as e:
+        logger.error("Chat error: %s", e)
+        raise HTTPException(status_code=502, detail="Failed to get a response from the AI.")
+
+    return {"response": reply}

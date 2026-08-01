@@ -100,3 +100,18 @@
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
+
+/* ── Ken Burns cinematic zoom for hero images ───────────────────────────── */
+@keyframes ken-burns {
+  0%   { transform: scale(1) translate(0, 0); }
+  50%  { transform: scale(1.08) translate(-1%, -0.5%); }
+  100% { transform: scale(1.03) translate(0.5%, 0.5%); }
+}
+
+/* ── Smooth scrolling & selection ───────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+::selection {
+  background-color: rgba(26, 26, 46, 0.15);
+  color: inherit;
+}
