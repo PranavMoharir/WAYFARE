@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { ArrowRight, Plane, MapPin, Calendar, Wallet } from 'lucide-react';
+import { ArrowRight, Plane, MapPin, Calendar, Wallet, Sparkles, Search, Shield, Heart } from 'lucide-react';
 import HeroBackground from '../components/HeroBackground';
 import Logo from '../components/Logo';
 
@@ -55,10 +55,11 @@ function StepCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.5, delay, ease: 'easeOut' }}
-      className="bg-white rounded-2xl border border-border p-7 flex flex-col gap-4"
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="bg-white rounded-2xl border border-border p-7 flex flex-col gap-4 hover:shadow-lg hover:shadow-black/5 transition-shadow duration-300 cursor-default"
     >
-      <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-        {number}
+      <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600">
+        <span className="text-xs font-bold tracking-widest">{number}</span>
       </span>
       <h3 className="text-lg font-semibold text-foreground leading-snug">{title}</h3>
       <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
@@ -178,6 +179,16 @@ export default function LandingPage() {
               className="hover:text-foreground transition-colors"
             >
               Destinations
+            </button>
+            <button
+              onClick={() => {
+                const fab = document.getElementById('chat-fab');
+                if (fab) fab.click();
+              }}
+              className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              AI Assistant
             </button>
           </div>
 
@@ -341,7 +352,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── Destinations Scroll ────────────────────────────────────── */}
-      <section id="destinations" className="py-12 border-y border-border overflow-hidden">
+      <section id="destinations" className="py-12 border-y border-border overflow-hidden relative">
+        {/* Gradient fade edges */}
+        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
         <div className="flex gap-3 animate-[scroll_30s_linear_infinite] w-max">
           {[...destinations, ...destinations].map((d, i) => (
             <DestPill key={i} label={d} />
@@ -385,9 +399,9 @@ export default function LandingPage() {
             className="grid sm:grid-cols-3 gap-10 text-center"
           >
             {[
-              { stat: 'Real flights', label: 'Live pricing fetched for your exact dates' },
-              { stat: 'Real hotels', label: 'Actual availability, not curated lists' },
-              { stat: 'Budget-aware', label: 'We trim the plan to fit what you set' },
+              { icon: Search, stat: 'Real flights', label: 'Live pricing fetched for your exact dates' },
+              { icon: Shield, stat: 'Real hotels', label: 'Actual availability, not curated lists' },
+              { icon: Heart, stat: 'Budget-aware', label: 'We trim the plan to fit what you set' },
             ].map((item, i) => (
               <motion.div
                 key={item.stat}
@@ -395,10 +409,13 @@ export default function LandingPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1, duration: 0.4 }}
-                className="flex flex-col items-center gap-2"
+                className="flex flex-col items-center gap-3"
               >
-                <p className="text-2xl font-bold text-foreground">{item.stat}</p>
-                <p className="text-sm text-muted-foreground max-w-[200px]">{item.label}</p>
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-blue-600">
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <p className="text-xl font-bold text-foreground">{item.stat}</p>
+                <p className="text-sm text-muted-foreground max-w-[220px] leading-relaxed">{item.label}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -412,12 +429,14 @@ export default function LandingPage() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="bg-foreground text-background rounded-3xl px-10 py-14 flex flex-col items-center gap-6"
+          className="bg-gradient-to-br from-[#1A1A2E] via-[#232347] to-[#1A1A2E] text-background rounded-3xl px-10 py-14 flex flex-col items-center gap-6 relative overflow-hidden"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold leading-tight">
+          {/* Subtle decorative glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-40 bg-blue-500/10 blur-3xl rounded-full pointer-events-none" />
+          <h2 className="text-3xl sm:text-4xl font-bold leading-tight relative">
             Ready to stop overthinking<br />and start exploring?
           </h2>
-          <p className="text-background/70 text-base max-w-sm leading-relaxed">
+          <p className="text-background/70 text-base max-w-sm leading-relaxed relative">
             Enter your trip details and get a full plan — flights, hotels, and
             things to do — in one go.
           </p>
@@ -426,7 +445,7 @@ export default function LandingPage() {
             whileHover={{ scale: 1.03, backgroundColor: '#2d2d4e' }}
             whileTap={{ scale: 0.97 }}
             onClick={() => navigate('/plan')}
-            className="flex items-center gap-2 bg-background text-foreground font-semibold rounded-full px-8 py-3.5 text-base transition-colors"
+            className="relative flex items-center gap-2 bg-background text-foreground font-semibold rounded-full px-8 py-3.5 text-base transition-colors"
           >
             Plan My Trip — Free
             <ArrowRight className="w-4 h-4" />
@@ -435,9 +454,12 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ─────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-8 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <Logo variant="dark" className="scale-90 origin-left" />
+      <footer className="border-t border-border py-10 px-6">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 text-sm text-muted-foreground">
+          <div className="flex flex-col items-center sm:items-start gap-1">
+            <Logo variant="dark" className="scale-90 origin-left" />
+            <p className="text-xs text-muted-foreground">AI-powered trip planning, done right.</p>
+          </div>
           <p>© {new Date().getFullYear()} Wayfare. All rights reserved.</p>
         </div>
       </footer>

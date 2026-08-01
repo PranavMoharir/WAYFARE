@@ -24,3 +24,19 @@ export const checkHealth = async (): Promise<{ message: string }> => {
   const response = await apiClient.get<{ message: string }>('/', { timeout: 5_000 });
   return response.data;
 };
+
+export interface ChatMessagePayload {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export const sendChatMessage = async (
+  messages: ChatMessagePayload[]
+): Promise<string> => {
+  const response = await apiClient.post<{ response: string }>(
+    '/chat',
+    { messages },
+    { timeout: 30_000 }
+  );
+  return response.data.response;
+};
