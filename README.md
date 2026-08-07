@@ -90,9 +90,6 @@ This project prioritizes real data wherever a genuinely free, individually-acces
 
 **Done:** LangGraph orchestration, real MCP tool-calling for flights/hotels, RAG-grounded curator, budget-enforcer negotiation loop with infeasibility detection, category-based activity pricing, full Gemini → Groq migration, real end-to-end testing.
 
-**In progress / planned:** FastAPI backend wrapping the agent, frontend UI, containerized deployment.
+**In progress / planned:** containerized deployment.
 
-## Credits
 
-* Researcher, budget-enforcer, and LangGraph orchestration: [Pranav Moharir](https://github.com/PranavMoharir)
-* RAG/curator agent: [Dhruv](https://github.com/dhruvHhh)
