@@ -18,10 +18,12 @@ import {
   Users,
   Download,
   Loader2,
+  Sparkles,
+  Compass,
 } from 'lucide-react';
 import Logo from '../components/Logo';
 import { useTripStore } from '../store/useTripStore';
-import type { Flight, Hotel as HotelType, Activity } from '../types';
+import type { Flight, Hotel as HotelType, Activity, SuggestedExperience } from '../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatINR(value: number | string | undefined): string {
@@ -230,6 +232,34 @@ function ActivityCard({ activity }: { activity: Activity }) {
   );
 }
 
+function ExperienceCard({ exp }: { exp: SuggestedExperience }) {
+  return (
+    <div className="bg-white border border-border rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-semibold text-foreground leading-snug">{exp.name}</h3>
+        <span className="shrink-0 text-xs font-medium border rounded-full px-2.5 py-0.5 bg-indigo-50 text-indigo-700 border-indigo-100">
+          {exp.category}
+        </span>
+      </div>
+      {exp.reason && (
+        <p className="text-sm text-muted-foreground leading-relaxed">{exp.reason}</p>
+      )}
+      <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-border">
+        {exp.estimated_duration ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" />
+            {exp.estimated_duration}
+          </span>
+        ) : <span />}
+        <span className="text-right">
+          <span className="block text-sm font-bold">{formatINR(exp.estimated_cost)}</span>
+          <span className="block text-xs text-muted-foreground">per person · est.</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Results Page ─────────────────────────────────────────────────────────────
 export default function ResultsPage() {
   const navigate = useNavigate();
@@ -279,6 +309,9 @@ export default function ResultsPage() {
     dates,
     budget,
     num_people,
+    suggested_experiences,
+    suggested_experiences_cost,
+    suggested_total,
   } = response;
   const nights = getNights(dates);
   const proposal = current_proposal;
@@ -449,13 +482,81 @@ export default function ResultsPage() {
 
           {/* Activities */}
           {proposal && proposal.activities.length > 0 && (
-            <div className="mb-10">
+            <div className="mb-5">
               <div className="bg-white border border-border rounded-2xl p-4 sm:p-5">
                 <SectionLabel>Things To Do in {destination} · {proposal.activities.length} experiences</SectionLabel>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                   {proposal.activities.map((a, i) => (
                     <ActivityCard key={`${a.name}-${i}`} activity={a} />
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Activities empty-state */}
+          {proposal && proposal.activities.length === 0 && (
+            <div className="mb-5">
+              <div className="bg-white border border-border rounded-2xl p-5 text-center">
+                <Compass className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="font-semibold">No curated activities found for {destination}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We couldn't pull enough local attraction data for this destination. Your flight and stay are set — check the suggested experiences below.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Suggested experiences — "make the most of your budget" */}
+          {proposal && suggested_experiences && suggested_experiences.length > 0 && (
+            <div className="mb-10">
+              <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4 sm:p-5">
+                <div className="flex items-start gap-2 mb-1">
+                  <Sparkles className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-indigo-900">Make the most of your budget</h2>
+                    <p className="text-xs sm:text-sm text-indigo-700/80">
+                      Your plan is comfortably under budget — here are optional paid experiences you could add. Costs are approximate estimates.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mt-4">
+                  {suggested_experiences.map((e, i) => (
+                    <ExperienceCard key={`${e.name}-${i}`} exp={e} />
+                  ))}
+                </div>
+
+                {/* Two budgets: base plan vs. with suggested experiences */}
+                <div className="mt-4 bg-white border border-indigo-100 rounded-2xl p-4 sm:p-5">
+                  <SectionLabel>If you add these experiences</SectionLabel>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Base plan (flight + hotel + activities)</span>
+                      <span className="font-semibold">{formatINR(proposal.total_cost)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Suggested experiences ({suggested_experiences.length}){peopleCount > 1 && <span className="text-xs">— {peopleCount} travellers</span>}
+                      </span>
+                      <span className="font-semibold">+{formatINR(suggested_experiences_cost ?? 0)}</span>
+                    </div>
+                    <div className="pt-2.5 border-t border-border flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold">Total with experiences</span>
+                        {peopleCount > 1 && suggested_total !== undefined && (
+                          <p className="text-xs text-muted-foreground">≈ {formatINR(suggested_total / peopleCount)} per person</p>
+                        )}
+                      </div>
+                      <span className="text-lg sm:text-xl font-bold">{formatINR(suggested_total ?? proposal.total_cost)}</span>
+                    </div>
+                    {suggested_total !== undefined && suggested_total <= budget && (
+                      <p className="text-xs text-green-700 pt-1">
+                        Still {formatINR(budget - suggested_total)} under your {formatINR(budget)} budget.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
