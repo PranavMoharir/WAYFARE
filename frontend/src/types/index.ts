@@ -66,6 +66,16 @@ export interface Proposal {
   shortfall?: number;
 }
 
+// Optional paid experiences suggested when the plan lands well under budget.
+// `estimated_cost` is an approximate PER-PERSON amount in INR.
+export interface SuggestedExperience {
+  name: string;
+  reason: string;
+  estimated_cost: number;
+  category: string;
+  estimated_duration?: string;
+}
+
 export interface TripResponse {
   origin: string;
   destination: string;
@@ -82,4 +92,8 @@ export interface TripResponse {
   data_incomplete?: boolean;
   incomplete_reason?: string;
   round_count: number;
+  // Optional upsell shown when the plan is comfortably under budget.
+  suggested_experiences?: SuggestedExperience[];
+  suggested_experiences_cost?: number; // group total (per-person × travellers)
+  suggested_total?: number;            // base total_cost + suggested_experiences_cost
 }

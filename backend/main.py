@@ -134,6 +134,7 @@ _PUBLIC_FIELDS = (
     "flight_options", "hotel_options", "activities", "current_proposal",
     "budget_check_passed", "budget_infeasible", "data_incomplete",
     "incomplete_reason", "round_count",
+    "suggested_experiences", "suggested_experiences_cost", "suggested_total",
 )
 
 # Shown to users instead of the graph's detailed ``incomplete_reason`` (which

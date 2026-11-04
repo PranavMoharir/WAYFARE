@@ -79,6 +79,13 @@ class TravelState(TypedDict, total=False):
     # is not meaningful. See ``budget_enforcer_node``.
     data_incomplete: bool
     incomplete_reason: str
+    # Optional paid experiences proposed when the plan lands well under budget
+    # (see ``suggester_node``). Kept separate from the core ``activities`` so the
+    # base plan's cost is unaffected; the frontend shows them as an upsell with a
+    # second "with experiences" total.
+    suggested_experiences: List[Dict[str, Any]]
+    suggested_experiences_cost: float
+    suggested_total: float
 
 
 # --------------------------------------------------------------------------- #
@@ -602,6 +609,83 @@ def budget_enforcer_node(state: TravelState) -> TravelState:
     return state
 
 
+# Only suggest paid extras when the plan leaves real headroom: at least this
+# fraction of the budget AND this absolute amount (INR) unspent. Both tunable.
+_SUGGEST_MIN_FRACTION = float(os.getenv("SUGGEST_MIN_BUDGET_FRACTION", "0.15"))
+_SUGGEST_MIN_ABSOLUTE = float(os.getenv("SUGGEST_MIN_BUDGET_ABSOLUTE", "5000"))
+
+
+def suggester_node(state: TravelState) -> TravelState:
+    """Propose optional paid experiences when the plan is well under budget.
+
+    Runs once on the terminal path. It never alters the core proposal or its
+    cost; it only adds a separate ``suggested_experiences`` list (each with a
+    per-person estimate) plus a ``suggested_total`` = base total + the extras,
+    greedily chosen to stay within the leftover budget.
+    """
+    print("suggester_node")
+
+    proposal = state.get("current_proposal") or {}
+    budget = state.get("budget")
+    total_cost = proposal.get("total_cost")
+
+    # Only meaningful for a complete, within-budget plan.
+    if (
+        not state.get("budget_check_passed")
+        or state.get("budget_infeasible")
+        or state.get("data_incomplete")
+        or budget is None
+        or total_cost is None
+    ):
+        return state
+
+    remaining = budget - total_cost
+    if remaining < max(_SUGGEST_MIN_FRACTION * budget, _SUGGEST_MIN_ABSOLUTE):
+        print(f"  under-budget headroom {remaining} below threshold; no suggestions")
+        return state
+
+    num_people = max(int(state.get("num_people", 1) or 1), 1)
+    remaining_per_person = remaining / num_people
+
+    try:
+        from agents.suggester import suggest_optional_experiences
+
+        experiences = suggest_optional_experiences(
+            destination=state.get("destination", ""),
+            preferences=state.get("preferences") or [],
+            remaining_budget_per_person=remaining_per_person,
+            num_people=num_people,
+            days=_compute_days(state.get("dates", "")),
+        )
+    except Exception as exc:  # graceful: suggestions are a bonus, never fatal
+        print(f"  suggestions unavailable ({exc!r})")
+        return state
+
+    # Greedily keep experiences whose cumulative GROUP cost fits the leftover
+    # budget, so ``suggested_total`` never exceeds the user's budget.
+    kept: List[Dict[str, Any]] = []
+    running_group_cost = 0.0
+    for exp in experiences:
+        group_cost = float(exp.get("estimated_cost", 0)) * num_people
+        if group_cost <= 0:
+            continue
+        if running_group_cost + group_cost <= remaining:
+            kept.append(exp)
+            running_group_cost += group_cost
+
+    if not kept:
+        return state
+
+    state["suggested_experiences"] = kept
+    state["suggested_experiences_cost"] = running_group_cost
+    state["suggested_total"] = total_cost + running_group_cost
+    print(
+        f"  {len(kept)} suggested experiences, "
+        f"group cost={running_group_cost}, suggested_total={state['suggested_total']}"
+    )
+    return state
+
+
 def _after_budget(state: TravelState) -> str:
     """Stop on success, infeasibility, or incomplete data; else retry via curator.
 
@@ -628,17 +712,21 @@ def build_graph():
     graph.add_node("researcher", researcher_node)
     graph.add_node("curator", curator_node)
     graph.add_node("budget_enforcer", budget_enforcer_node)
+    graph.add_node("suggester", suggester_node)
 
     graph.set_entry_point("researcher")
     graph.add_edge("researcher", "curator")
     graph.add_edge("curator", "budget_enforcer")
     # Loop back to the curator for another proposal until the budget check passes
-    # or we hit the round cap (handled inside ``_after_budget``).
+    # or we hit the round cap (handled inside ``_after_budget``). On every
+    # terminal path we pass through the suggester (which no-ops unless the plan
+    # is comfortably under budget) before ending.
     graph.add_conditional_edges(
         "budget_enforcer",
         _after_budget,
-        {"curator": "curator", "END": END},
+        {"curator": "curator", "END": "suggester"},
     )
+    graph.add_edge("suggester", END)
 
     return graph.compile()
 

@@ -43,11 +43,22 @@ def _fetch_summary(title: str) -> dict | None:
 
 
 def _search_wikipedia(attraction_name: str) -> str | None:
+    titles = search_titles(attraction_name, limit=1)
+    return titles[0] if titles else None
+
+
+def search_titles(query: str, limit: int = 10) -> list[str]:
+    """Return up to ``limit`` real Wikipedia page titles matching ``query``.
+
+    Unlike the LLM seed generator (which can hallucinate non-existent pages),
+    every title returned here is an actual article, so it is a reliable source
+    of attraction seeds for a destination.
+    """
     params = {
         "action": "query",
         "list": "search",
-        "srsearch": attraction_name,
-        "srlimit": 1,
+        "srsearch": query,
+        "srlimit": limit,
         "format": "json",
         "origin": "*",
     }
@@ -57,11 +68,9 @@ def _search_wikipedia(attraction_name: str) -> str | None:
         )
         response.raise_for_status()
         results = response.json().get("query", {}).get("search", [])
-        if results:
-            return results[0]["title"]
+        return [r["title"] for r in results if r.get("title")]
     except requests.RequestException:
-        pass
-    return None
+        return []
 
 
 def _parse_summary(data: dict, attraction_name: str, destination: str) -> dict | None:

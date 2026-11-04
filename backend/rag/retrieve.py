@@ -5,15 +5,18 @@ from services.chroma_service import vector_store
 logger = logging.getLogger(__name__)
 
 
+def count_documents(destination: str) -> int:
+    """Return how many documents are stored in Chroma for this destination."""
+    results = vector_store.get(where={"destination": destination})
+    return len(results["ids"])
+
+
 def destination_exists(destination: str) -> bool:
     """Return True if any documents for this destination are stored in Chroma."""
-    results = vector_store.get(where={"destination": destination})
-    exists = len(results["ids"]) > 0
-    if exists:
-        logger.info(
-            f"[retrieve] '{destination}' already indexed ({len(results['ids'])} docs)."
-        )
-    return exists
+    count = count_documents(destination)
+    if count:
+        logger.info(f"[retrieve] '{destination}' already indexed ({count} docs).")
+    return count > 0
 
 
 def retrieve_context(query: str, destination: str, k: int = 10) -> str:

@@ -47,6 +47,18 @@ def _evict_oldest_destinations() -> None:
         )
 
 
+def delete_destination(destination: str) -> None:
+    """Remove all stored documents for a destination (used before a rebuild)."""
+    try:
+        victims = vector_store.get(where={"destination": destination})
+        ids = victims.get("ids") or []
+        if ids:
+            vector_store.delete(ids=ids)
+            logger.info(f"[ingest] Cleared {len(ids)} stale docs for '{destination}'.")
+    except Exception:  # defensive: a failed clear must not block the rebuild
+        logger.exception(f"[ingest] Could not clear corpus for '{destination}'.")
+
+
 def ingest(destination: str, corpus: list[dict]) -> None:
     """
     Store a list of attraction dicts in Chroma as individual documents.

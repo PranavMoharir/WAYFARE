@@ -1,16 +1,22 @@
 import json
 import logging
+import os
 
 from services.groq_service import generate_text
 from rag.corpus_builder import build_corpus
-from rag.ingest import ingest
-from rag.retrieve import retrieve_context, destination_exists
+from rag.ingest import ingest, delete_destination
+from rag.retrieve import retrieve_context, destination_exists, count_documents
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# A cached corpus smaller than this is treated as a failed/thin build (e.g. an
+# early run where the LLM seed list hallucinated mostly non-existent pages) and
+# is rebuilt from scratch with the improved seeding. Tunable via MIN_CORPUS_DOCS.
+_MIN_CORPUS_DOCS = int(os.getenv("MIN_CORPUS_DOCS", "6"))
 
 
 def recommend_activities(
@@ -39,12 +45,20 @@ def recommend_activities(
             ]
         }
     """
-    if not destination_exists(destination):
-        logger.info(f"[curator] Building corpus for new destination: {destination}")
+    cached = count_documents(destination)
+    if cached >= _MIN_CORPUS_DOCS:
+        logger.info(f"[curator] Destination already indexed: {destination} ({cached} docs)")
+    else:
+        if cached:
+            logger.info(
+                f"[curator] Cached corpus for {destination} is thin "
+                f"({cached} < {_MIN_CORPUS_DOCS} docs); rebuilding."
+            )
+            delete_destination(destination)
+        else:
+            logger.info(f"[curator] Building corpus for new destination: {destination}")
         corpus = build_corpus(destination)
         ingest(destination, corpus)
-    else:
-        logger.info(f"[curator] Destination already indexed: {destination}")
 
     query = " ".join(preferences)
     context = retrieve_context(query=query, destination=destination, k=10)
