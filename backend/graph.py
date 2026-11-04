@@ -54,6 +54,15 @@ GROQ_MODEL = "openai/gpt-oss-20b"
 
 _PLACEHOLDER_GROQ_KEYS = {"", "your_groq_api_key_here", "your-groq-api-key-here"}
 
+# Hard ceiling on live (uncached) searches per tool, per plan — a quota guard so
+# a model that keeps retrying can't drain the ~20/month RapidAPI quota. Flights
+# get one extra attempt to allow a single IATA-code retry; hotels get one.
+# Tunable via MAX_FLIGHT_SEARCHES / MAX_HOTEL_SEARCHES.
+_MAX_SEARCH_ATTEMPTS = {
+    "search_flights": int(os.getenv("MAX_FLIGHT_SEARCHES", "3")),
+    "search_hotels": int(os.getenv("MAX_HOTEL_SEARCHES", "2")),
+}
+
 
 class TravelState(TypedDict, total=False):
     """Shared state passed between nodes in the travel-planning graph."""
@@ -177,12 +186,18 @@ def _build_prompt(state: TravelState) -> str:
         "Use the available tools to find real options:\n"
         "- Call search_flights(origin, destination, date) for the outbound "
         "flight. Use the first (check-in) date from the travel dates, in "
-        "YYYY-MM-DD format.\n"
+        "YYYY-MM-DD format. For the destination (and origin), prefer the main "
+        "international AIRPORT's 3-letter IATA code (for example Maldives -> "
+        "MLE, Mumbai -> BOM, Goa -> GOI) rather than the country or region "
+        "name — a country name often returns no flights.\n"
         "- Call search_hotels(destination, checkin, checkout) for lodging, "
         "using the check-in and check-out dates from the travel dates in "
         "YYYY-MM-DD format.\n\n"
-        "Find flight and hotel options that fit within the budget. Call both "
-        "tools before finishing."
+        "Call each tool only ONCE. Every tool call costs a limited API quota, "
+        "so do not repeat a search with alternate spellings of the same place. "
+        "If search_flights returns no results, you may retry it AT MOST once "
+        "using the destination airport's IATA code, then stop. Call both tools "
+        "before finishing."
     )
 
 
@@ -221,6 +236,15 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
     hotel_options: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
     called_tools: set[str] = set()
+    # Quota guards (each live search burns the ~20/month RapidAPI quota):
+    #   * in_run_cache — a tool called twice with identical args reuses the first
+    #     result instead of hitting the API again.
+    #   * api_attempts + _MAX_SEARCH_ATTEMPTS — a hard ceiling per tool so a model
+    #     that keeps retrying variants can't drain the quota in one plan.
+    # Combined with "stop once this tool already has results" below, the common
+    # path is one live call per tool.
+    in_run_cache: Dict[str, Dict[str, Any]] = {}
+    api_attempts: Dict[str, int] = {}
 
     # Let the model call tools over a few turns until it stops requesting them.
     for _ in range(5):
@@ -246,6 +270,56 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
 
             called_tools.add(name)
 
+            # ── Quota guards ──────────────────────────────────────────────────
+            argkey = f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+            existing = (
+                flight_options if name == "search_flights"
+                else hotel_options if name == "search_hotels"
+                else None
+            )
+            if argkey in in_run_cache:
+                # Identical call already made this run — reuse, don't hit the API.
+                print(f"  [{name}] skipped duplicate call (reusing earlier result)")
+                messages.append(
+                    ToolMessage(
+                        content=json.dumps(in_run_cache[argkey]),
+                        tool_call_id=call["id"],
+                    )
+                )
+                continue
+            if existing:
+                # This tool already returned options — searching again only
+                # wastes quota, so tell the model to move on.
+                print(f"  [{name}] already has {len(existing)} result(s); skipping re-search")
+                messages.append(
+                    ToolMessage(
+                        content=json.dumps({
+                            "info": (
+                                f"{name} already returned {len(existing)} result(s). "
+                                "Do not search it again; proceed with the other tool "
+                                "or finish."
+                            ),
+                        }),
+                        tool_call_id=call["id"],
+                    )
+                )
+                continue
+            if api_attempts.get(name, 0) >= _MAX_SEARCH_ATTEMPTS.get(name, 99):
+                msg = (
+                    f"Reached the maximum of {api_attempts[name]} {name} attempts "
+                    "for this trip (API quota guard)."
+                )
+                print(f"  [{name}] {msg}")
+                errors.append(
+                    {"tool": name, "args": args, "error_kind": "attempt_cap", "error": msg}
+                )
+                messages.append(
+                    ToolMessage(content=json.dumps({"error": msg, "error_kind": "attempt_cap"}),
+                                tool_call_id=call["id"])
+                )
+                continue
+            api_attempts[name] = api_attempts.get(name, 0) + 1
+
             # A tool that raises (rather than returning an ``error`` payload)
             # must not look like an empty result set, so record it and move on.
             try:
@@ -268,6 +342,7 @@ async def _run_research(state: TravelState) -> Dict[str, List[Dict[str, Any]]]:
                 continue
 
             parsed = _parse_tool_output(raw)
+            in_run_cache[argkey] = parsed
             result_key = "flights" if name == "search_flights" else "hotels"
             items = parsed.get(result_key) or []
 
